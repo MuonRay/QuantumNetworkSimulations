@@ -1,0 +1,2 @@
+# QuantumNetworkSimulations
+A series of  simulation codes used to emulate quantum-like networks in the simulation of emergent adaptive behavior, such as network synchronization, and relate the nature of the coupled harmonic oscillators with non-local behavior and chimera states in systems of quantum particles. A full showcase of this project is discussed in the following videos:https://www.youtube.com/watch?time_continue=115&amp;v=WX3Ds_xCOaE 
