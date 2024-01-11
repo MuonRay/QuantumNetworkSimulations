@@ -37,6 +37,14 @@ from random import uniform
 
 from qutip.visualization import plot_wigner, hinton
 
+#qutip star imports
+from qutip import *
+
+from qutip import Qobj, rand_dm, fidelity, displace, qdiags, qeye, expect
+from qutip.states import coherent, coherent_dm, thermal_dm, fock_dm
+from qutip.wigner import qfunc
+
+
 from pygsp import graphs
 
 #def gridsize(val):
@@ -53,9 +61,12 @@ from pygsp import graphs
     
 
 def initialize(): 
-    global g, nextg
+    global g, nextg, hilbert_size
     
-    n = 3
+    
+
+    
+    n = 2
     g = nx.grid_graph(dim=[n,n])
 
     #g = nx.karate_club_graph()
@@ -83,9 +94,9 @@ def initialize():
        
     grid2d = graphs.Graph.from_networkx(nextg)
     
-    print(grid2d.W.toarray())
-    print(grid2d.signals)
-    print(grid2d)
+    #print(grid2d.W.toarray())
+    #print(grid2d.signals)
+    #print(grid2d)
     
     grid2d.compute_fourier_basis()
     
@@ -109,19 +120,67 @@ def initialize():
     fig, axes = plt.subplots(2, 3, figsize=(10, 6.6))
     count = 0
     for j in range(2):
-        for i in range(3):
+        for i in range(2):
             grid2d.plot_signal(grid2d.U[:, count*1], ax=axes[j,i],colorbar=False)
             axes[j,i].set_xticks([])
             axes[j,i].set_yticks([])
             axes[j,i].set_title(f'Eigvec {count*1+1}')
             count+=1
             fig.tight_layout()
+            
+            
+    
+    #hilbert space must be the same as the network size for this to make sense
+    
+    
+    alphas = grid2d.signals['omega'] 
+    
+
+    print(alphas)
+    
+    betas = grid2d.signals['theta']
+    
+    print(betas)
+    
+    hilbert_size = n
+
+    
+
+    
+    psi = coherent(hilbert_size, 0)
+    
+    rho = coherent_dm(hilbert_size, 1-1j)
+
+    d = displace(hilbert_size, 2+2j)
+    
+    
+    
+    #psi = sum([coherent_dm(hilbert_size, a) for a in alphas])
+    psi = psi.unit()
+    rho = psi*psi.dag()
+
+    fig, ax = plt.subplots(1, 4, figsize=(19, 4))
+    
+    plot_wigner_fock_distribution(psi, fig=fig, axes=[ax[0], ax[1]])
+    plot_wigner_fock_distribution(d*psi, fig=fig, axes=[ax[2], ax[3]])
+    
+    ax[0].set_title(r"Initial state, $\psi_{vac} = |0 \rangle$")
+    ax[2].set_title(r"Displaced state, $D(\alpha=2+2i )\psi_{vac}$")
+    plt.show()
+    
+    fig, ax = plot_wigner_fock_distribution(rho, figsize=(9, 4))
+    ax[0].set_title("Superposition of three coherent states")
+    plt.show()
+    
+    
+    measured_populations = [measure_population(b, rho) for b in betas]
+
+    
+
+
+
 
         
-#for space vs time graph
-    
-xdata = []    
-ydata = []
 
 
 def observe(): 
@@ -167,10 +226,41 @@ Dt = 0.01 # Delta t
 #        nextg.node[i]['theta'] = theta_i + (beta * theta_i + alpha * (np.sum(sin(g.node[j]['theta'] - theta_i) for j in g.neighbors(i))) * Dt) 
 #    g, nextg = nextg, g 
 
+def measure_population(beta, rho):
+    """
+    Measures the photon number statistics for state rho when displaced
+    by angle alpha.
+    
+    Parameters
+    ----------    
+    alpha: np.complex
+        A complex displacement.
+
+    rho:
+        The density matrix as a QuTiP Qobj (`qutip.Qobj`)
+
+    Returns
+    -------
+    population: ndarray
+        A 1D array for the probabilities for populations.
+    """
+    hilbertsize = rho.shape[0]
+    # Apply a displacement to the state and then measure the diagonals.
+
+    D = displace(hilbertsize, beta)
+    rho_disp = D*rho*D.dag()
+    populations = np.real(np.diagonal(rho_disp.full()))
+    return populations
+
+
+
+
+
 def update(): 
-    global g, nextg, eig_values, eig_vectors, rho, grid2d
+    global g, nextg, eig_values, eig_vectors, rho, grid2d, theta_i
     for i in list(g.nodes()): 
         theta_i = g.node[i]['theta'] 
+        omega_i = g.node[i]['omega']
         nextg.node[i]['theta'] = theta_i + (g.node[i]['omega'] + alpha * ( \
            sum(np.sin(g.node[j]['theta'] - theta_i) for j in g.neighbors(i)) \
            / g.degree(i))) * Dt 
@@ -198,24 +288,34 @@ def update():
     fiedler_pos = np.where(eig_values.real == np.sort(eig_values.real)[1])[0][0]
     fiedler_vector = np.transpose(eig_vectors)[fiedler_pos]
     
-    print("Fiedler value: " + str(fiedler_pos.real))
+    #print("Fiedler value: " + str(fiedler_pos.real))
 
+    # this will be an eigenbra version 
     print("Fiedler vector: " + str(fiedler_vector.real))
+    
+    
     #nx.laplacian_matrix(nextg).toarray()
     
     
     # applying matrix.trace() method
     LTrace = np.matrix.trace(Lap)
-    print(LTrace)
+    #print(LTrace)
     
-    #print density matrix 
+    #print density matrix from graph laplacian
+    
     rho = np.divide(Lap,LTrace)
-    print(rho)
     
+    #we need to represent this graph density matrix as a cavity reduced density matrix to make physical sense
     
+    #print(rho)
     
+
+
+
     
+    print(theta_i)
     
+    print(omega_i)
  
 
     
@@ -230,7 +330,6 @@ import pycxsimulator
 
 pycxsimulator.GUI().start(func=[initialize, observe, update]) 
 
-    
 
 
 #plt.figure(1)

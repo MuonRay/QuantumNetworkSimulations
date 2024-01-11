@@ -18,8 +18,6 @@ import numpy as np
 import scipy
 import numpy as np
 from scipy import misc
-import numpy as np
-import scipy.linalg as la
 
 from matplotlib import pyplot as plt  # For image viewing
 
@@ -27,17 +25,19 @@ from matplotlib import colors
 from matplotlib import ticker
 from matplotlib.colors import LinearSegmentedColormap
 
-from matplotlib.collections import LineCollection
-from matplotlib.colors import ListedColormap, BoundaryNorm
+#new feature 2022
+from qutip.visualization import plot_wigner, hinton
 
 
+import operator 
 
 from random import random as rand
 from random import uniform
 
-from qutip.visualization import plot_wigner, hinton
+import rustworkx as rx
 
-from pygsp import graphs
+from rustworkx.visualization import mpl_draw
+
 
 #def gridsize(val):
 #    '''
@@ -49,14 +49,25 @@ from pygsp import graphs
 
 #    n = int(val)
 #    return val
-    
-    
+
+
+
+
 
 def initialize(): 
-    global g, nextg
+    global g, nextg, A, nextA
     
     n = 3
-    g = nx.grid_graph(dim=[n,n])
+    #g = nx.grid_graph(dim=[n,n])
+    
+    #using dag
+    #g = nx.from_edgelist([dag], create_using=nx.DiGraph)
+    #construct classical network graph g from adjacency matrix
+    g = nx.scale_free_graph(n) #obtain a directed acyclic graph
+    #remove self loops
+    g.remove_edges_from(nx.selfloop_edges(g))
+
+
 
     #g = nx.karate_club_graph()
     
@@ -67,56 +78,13 @@ def initialize():
         #a = numpy.asarray(arr)
         #g.node[i]['omega'] = 1. + rand.uniform(-0.05, 0.05) 
         g.node[i]['omega'] = 1. + uniform(-0.05, 0.05)        
-    nextg = g.copy()     
+    nextg = g.copy()  
     
         
     for i in list(g.nodes()):
         g.node[i]['theta'] = random()    
     nextg = g.copy() 
-    
-    
-    
-    
-    
-
-    
-       
-    grid2d = graphs.Graph.from_networkx(nextg)
-    
-    print(grid2d.W.toarray())
-    print(grid2d.signals)
-    print(grid2d)
-    
-    grid2d.compute_fourier_basis()
-    
-    grid2d.set_coordinates()
-    
-
-
-
-
-# plot spectrum 
-    fig, ax = plt.subplots(1, 1, figsize=(7,7))
-    ax.plot(grid2d.e)
-    ax.set_xlabel('eigenvalue index (i)')
-    ax.set_ylabel('eigenvalue ($\lambda_{i}$)')
-    ax.set_title('2D-grid spectrum');
-    #fiedler vector highlighted graph 
-    grid2d.plot_signal(grid2d.U[:,1])
    
-    #plot all eigenvectors as network graph frames
-   
-    fig, axes = plt.subplots(2, 3, figsize=(10, 6.6))
-    count = 0
-    for j in range(2):
-        for i in range(3):
-            grid2d.plot_signal(grid2d.U[:, count*1], ax=axes[j,i],colorbar=False)
-            axes[j,i].set_xticks([])
-            axes[j,i].set_yticks([])
-            axes[j,i].set_title(f'Eigvec {count*1+1}')
-            count+=1
-            fig.tight_layout()
-
         
 #for space vs time graph
     
@@ -125,7 +93,7 @@ ydata = []
 
 
 def observe(): 
-    global g, nextg, grid2d
+    global g, nextg
     subplot(1,2,1)
     cla()
     nx.draw(g, cmap = cm.hsv, vmin = -1, vmax = 1, 
@@ -141,10 +109,6 @@ def observe():
     axis('image')
     
     axis([-1.1,1.1,-1.1,1.1])
-    
-    
- 
-
    
     
     #subplot(1,2,2)
@@ -152,8 +116,6 @@ def observe():
     #plot(xdata, ydata,'o',alpha = 0.05)
     #axis('image')
     # for space vs time plotting (chimera search)
-    
-
 
     
 alpha = 2 # coupling strength 
@@ -168,14 +130,19 @@ Dt = 0.01 # Delta t
 #    g, nextg = nextg, g 
 
 def update(): 
-    global g, nextg, eig_values, eig_vectors, rho, grid2d
+    global g, nextg, A, k_in, L
     for i in list(g.nodes()): 
         theta_i = g.node[i]['theta'] 
         nextg.node[i]['theta'] = theta_i + (g.node[i]['omega'] + alpha * ( \
            sum(np.sin(g.node[j]['theta'] - theta_i) for j in g.neighbors(i)) \
            / g.degree(i))) * Dt 
     g, nextg = nextg, g 
+    A = nx.adj_matrix(nextg).todense()
+    k_in = np.zeros(nextg.number_of_nodes())
     
+    L = np.diag(k_in) - A
+
+
     
     #for i, j in list(g.nodes()):
         #xdata.append(g.degree(i))
@@ -185,52 +152,11 @@ def update():
         #xdata.append(g.degree(j)); ydata.append(g.degree(i))
 
 
-    A = nx.adjacency_matrix(nextg)
-    print(A)
-    n, m = A.shape
-    diags = A.sum(axis=0)  # 1 = outdegree, 0 = indegree
-    D = scipy.sparse.spdiags(diags.flatten(), [0], m, n, format="csr")
-    L = (A-D)
-    Lap = L.todense()
-    print(Lap)
-    
-    eig_values, eig_vectors = la.eig(Lap)
-    fiedler_pos = np.where(eig_values.real == np.sort(eig_values.real)[1])[0][0]
-    fiedler_vector = np.transpose(eig_vectors)[fiedler_pos]
-    
-    print("Fiedler value: " + str(fiedler_pos.real))
-
-    print("Fiedler vector: " + str(fiedler_vector.real))
-    #nx.laplacian_matrix(nextg).toarray()
-    
-    
-    # applying matrix.trace() method
-    LTrace = np.matrix.trace(Lap)
-    print(LTrace)
-    
-    #print density matrix 
-    rho = np.divide(Lap,LTrace)
-    print(rho)
-    
-    
-    
-    
-    
- 
-
-    
-
-    #note you can calculate the trace faster using the hadamard product (element-wise multiplication)
-    # using the fiedler vector as the basis for the emergent density matrix 
-    
-    
-
 
 import pycxsimulator 
 
 pycxsimulator.GUI().start(func=[initialize, observe, update]) 
 
-    
 
 
 #plt.figure(1)
